@@ -4,7 +4,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-import app.api.routes as routes
+from app import service
 from app.main import app
 from app.models.schemas import AskResponse
 from app.rag import generator as gen
@@ -112,7 +112,7 @@ def test_ask_endpoint_passes_history_to_the_pipeline(monkeypatch) -> None:
             received.update(question=question, history=history)
             return AskResponse(answer='ok', sources=[], route='static', retrieved_chunk_ids=[])
 
-    monkeypatch.setattr(routes, '_pipeline', _RecordingPipeline())
+    monkeypatch.setattr(service, '_pipeline', _RecordingPipeline())
     client = TestClient(app)
     response = client.post('/ask', json={'question': 'How many majors did he win?', 'history': HISTORY})
 

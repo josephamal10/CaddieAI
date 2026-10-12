@@ -142,6 +142,30 @@ streamlit run frontend/streamlit_app.py
 - Health: `GET http://127.0.0.1:8001/health`
 - Ask: `POST http://127.0.0.1:8001/ask` with `{"question": "What is a bogey?"}`
 
+### Hosted demo (Streamlit Community Cloud)
+
+The public demo runs on Streamlit Community Cloud, which hosts the chat page only, so
+there it runs the pipeline inside the app instead of calling the API
+(`GOLF_BACKEND=inprocess`). Both paths go through `app/service.py`, so the hosted app
+and the API give the same answers, limits and error messages.
+
+A public link spends the API keys' credit on every visitor's question, so
+`DAILY_QUESTION_LIMIT` caps questions per UTC day across all visitors (100 on the demo).
+Past it, the app says the demo's daily limit is reached and calls no provider. The
+count is kept in memory, so it restarts at 0 if the app restarts. Set a budget alert on
+the Gemini key's Google Cloud project as well.
+
+To deploy your own:
+
+1. On https://share.streamlit.io sign in with GitHub and choose **Create app → Deploy a
+   public app from GitHub**: this repo, branch `master`, main file
+   `frontend/streamlit_app.py`.
+2. Under **Advanced settings** pick Python 3.12 and paste the secrets from
+   `.streamlit/secrets.toml.example` with real key values. Secrets stay on Streamlit's
+   side; `.streamlit/secrets.toml` is git-ignored.
+3. Deploy. The sidebar says **Online** and shows the questions left today, or lists any
+   missing key under **Not configured**.
+
 Run Streamlit from the repo root so it picks up the theme in `.streamlit/config.toml`.
 The UI shows the active provider and model, disables the composer while the API is
 unreachable, and lists the source articles behind every answer, numbered to match the

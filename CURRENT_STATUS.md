@@ -1,10 +1,28 @@
 # Current status — CaddieAI
 
-Update this file at the end of each working session. Last updated: 2026-10-06.
+Update this file at the end of each working session. Last updated: 2026-10-12.
 
 ## Phase
 
 Phase 2 — Query router + live web search (built 2026-10-01). Phase 1 (static RAG) is done.
+
+## Hosting — prepared 2026-10-12
+
+- Target: Streamlit Community Cloud, public link, open to anyone, capped at 100 questions
+  per UTC day across all visitors (chosen with Joseph on 2026-10-12)
+- `app/service.py` holds what `/ask` and `/health` do; the API and the hosted app both
+  call it. The chat page runs the pipeline itself with `GOLF_BACKEND=inprocess` (no API
+  server on Streamlit Cloud), and copies Streamlit secrets into environment variables so
+  `app.config` reads them
+- Daily limit (`DAILY_QUESTION_LIMIT`, 0 = off): counted per UTC day in memory, so a
+  restart resets it; past it the app refuses with no provider call. `/health` reports
+  questions left and any missing API key names (never values)
+- Tested 2026-10-12 locally the way the host runs it (no API server, settings from a
+  secrets file, limit 3): knowledge-base, off-topic and live answers worked, the counter
+  went 3 → 0, and the 4th question was refused
+- CI now also runs on Python 3.12 (the hosted demo's version). Tests: 63
+- Still to do (Joseph): create the app on share.streamlit.io and paste the secrets;
+  ask Nanonino for a budget alert on the Gemini key's Google Cloud project
 
 ## Phase 2 — done 2026-10-01
 

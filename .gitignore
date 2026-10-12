@@ -1,4 +1,6 @@
 .env
+# Streamlit secrets hold real API keys (the .example file is the template)
+.streamlit/secrets.toml
 .venv/
 venv/
 __pycache__/

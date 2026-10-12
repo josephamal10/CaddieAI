@@ -1,13 +1,33 @@
 from __future__ import annotations
 
+import logging
 import os
+from pathlib import Path
 import re
+import sys
 import time
 
 import httpx
 import streamlit as st
 
 
+def _export_secrets() -> None:
+    """Streamlit Cloud keeps settings in st.secrets; app.config reads environment variables."""
+    try:
+        secrets = dict(st.secrets)
+    except Exception:                                      # no secrets file: local run
+        return
+    for name, value in secrets.items():
+        if isinstance(value, (str, int, float, bool)):
+            os.environ.setdefault(name, str(value))
+
+
+_export_secrets()
+# api: call the FastAPI server at GOLF_API_URL (local runs, start.bat).
+# inprocess: run the pipeline inside this app, for hosts with no API server (Streamlit Cloud).
+BACKEND = os.environ.get('GOLF_BACKEND', 'api').strip().lower()
+if BACKEND == 'inprocess':
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 API_URL = os.environ.get('GOLF_API_URL', 'http://127.0.0.1:8001')
 ASK_TIMEOUT_SECONDS = 150.0                                # grounded answers can take ~50s
 HEALTH_TTL_SECONDS = 30                                    # keeps reruns off the health endpoint
@@ -41,15 +61,64 @@ st.set_page_config(
 )
 
 
+class BackendError(Exception):
+    """A message safe and useful to show the user in place of an answer."""
+
+
 @st.cache_data(ttl=HEALTH_TTL_SECONDS, show_spinner=False)
 def fetch_health() -> dict | None:
     """None means the API is unreachable, which disables the composer."""
+    if BACKEND == 'inprocess':
+        from app import service
+        return service.status()
     try:
         response = httpx.get(f'{API_URL}/health', timeout=5.0)
         response.raise_for_status()
         return response.json()
     except httpx.HTTPError:
         return None
+
+
+def ask_backend(question: str, history: list[dict]) -> dict:
+    if BACKEND == 'inprocess':
+        return _ask_inprocess(question, history)
+    try:
+        response = httpx.post(
+            f'{API_URL}/ask',
+            json={'question': question, 'history': history},
+            timeout=ASK_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        return response.json()
+    except httpx.ConnectError as exc:
+        raise BackendError(f'Cannot reach the API at {API_URL}.') from exc
+    except httpx.TimeoutException as exc:
+        raise BackendError(f'No response within {ASK_TIMEOUT_SECONDS:.0f}s. Try again in a moment.') from exc
+    except httpx.HTTPStatusError as exc:
+        raise BackendError(friendly_error(exc)) from exc
+
+
+def _ask_inprocess(question: str, history: list[dict]) -> dict:
+    """The same checks and error messages as the API's /ask, without a server."""
+    from pydantic import ValidationError
+
+    from app import service
+    from app.models.schemas import AskRequest
+    from app.rag.errors import RateLimitedError, UpstreamUnavailableError
+
+    try:
+        request = AskRequest(question=question, history=history)
+    except ValidationError as exc:
+        raise BackendError('That question is too short or too long.') from exc
+    try:
+        turns = [turn.model_dump() for turn in request.history]
+        return service.answer(request.question.strip(), turns).model_dump()
+    except (service.DailyLimitReachedError, RateLimitedError, UpstreamUnavailableError) as exc:
+        raise BackendError(str(exc)) from exc
+    except Exception as exc:
+        # Internal messages can carry raw provider payloads: log them, show a generic one.
+        logging.getLogger(__name__).exception('Ask failed')
+        raise BackendError('Something went wrong while answering. Try again in a moment.') from exc
 
 
 def friendly_error(exc: httpx.HTTPStatusError) -> str:
@@ -127,6 +196,9 @@ if 'messages' not in st.session_state:
     st.session_state.messages = []
 
 health = fetch_health()
+# Missing keys only matter when this app runs the pipeline itself (the API checks its own).
+missing = (health or {}).get('missing_keys') or []
+ready = bool(health) and not missing
 
 st.title('⛳ CaddieAI')
 st.caption(
@@ -138,7 +210,7 @@ st.caption(
 # In the main area the input stays pinned to the bottom wherever it is called.
 typed = st.chat_input(
     'Ask about golf rules, history, courses, players, or equipment…',
-    disabled=health is None,
+    disabled=not ready,
 )
 
 if not st.session_state.messages and not typed and 'pending_question' not in st.session_state:
@@ -169,13 +241,7 @@ if question:
         try:
             with st.spinner('Finding sources and drafting a cited answer…'):
                 started = time.perf_counter()
-                response = httpx.post(
-                    f'{API_URL}/ask',
-                    json={'question': question, 'history': history},
-                    timeout=ASK_TIMEOUT_SECONDS,
-                )
-                response.raise_for_status()
-                data = response.json()
+                data = ask_backend(question, history)
                 elapsed = time.perf_counter() - started
             search_query = data.get('search_query') or ''
             message.update(
@@ -188,18 +254,13 @@ if question:
                 model=data.get('model', ''),
                 elapsed=elapsed,
             )
-        except httpx.ConnectError:
-            message.update(content=f'Cannot reach the API at {API_URL}.', error=True)
-        except httpx.TimeoutException:
-            message.update(
-                content=f'No response within {ASK_TIMEOUT_SECONDS:.0f}s. Try again in a moment.',
-                error=True,
-            )
-        except httpx.HTTPStatusError as exc:
-            message.update(content=friendly_error(exc), error=True)
+        except BackendError as exc:
+            message.update(content=str(exc), error=True)
         render_assistant(message)
 
     st.session_state.messages.append(message)
+    fetch_health.clear()                                   # so "questions left today" is current
+    health = fetch_health()
 
 # Drawn last, so controls reflect the conversation after this turn was appended.
 # Sidebar placement is by container, not script order, so it still renders on the left.
@@ -208,14 +269,22 @@ with st.sidebar:
     st.caption('Phase 2 — routed: knowledge base, live web search, or published predictions.')
     st.divider()
 
-    if health:
-        st.success('API online')
+    if missing:
+        st.error('Not configured')
+        st.caption("Add these to the app's secrets: " + ', '.join(missing))
+    elif health:
+        st.success('Online' if BACKEND == 'inprocess' else 'API online')
         st.markdown(
             f"**Generator**  \n{health.get('llm_provider', 'unknown')} · "
             f"`{health.get('llm_model', 'unknown')}`"
         )
         if health.get('live_search') == 'off':
             st.caption('Live web search is off: live and prediction questions get a short notice.')
+        if health.get('questions_left_today') is not None:
+            st.caption(
+                f"Demo limit: {health['questions_left_today']} of {health['daily_limit']} "
+                'questions left today (resets at midnight UTC).'
+            )
     else:
         st.error('API offline')
         st.caption(f'Nothing answering at {API_URL}. Start it with:')

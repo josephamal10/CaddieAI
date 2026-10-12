@@ -53,6 +53,10 @@ class Settings(BaseSettings):
     # LLM_PROVIDER=claude) they get a short "not available" answer instead.
     live_search_enabled: bool = True
 
+    # Questions answered per UTC day across all visitors; 0 = no limit. Set it on a public
+    # deployment so the link can't run up the API bill (the hosted demo uses 100).
+    daily_question_limit: int = 0
+
     chunk_target_words: int = 300
     chunk_overlap_words: int = 50
 

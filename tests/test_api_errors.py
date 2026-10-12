@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-import app.api.routes as routes
+from app import service
 from app.main import app
 from app.rag.errors import RateLimitedError, UpstreamUnavailableError
 
@@ -22,7 +22,7 @@ class _FailingPipeline:
 
 
 def _client(monkeypatch: pytest.MonkeyPatch, exc: Exception) -> TestClient:
-    monkeypatch.setattr(routes, '_pipeline', _FailingPipeline(exc))
+    monkeypatch.setattr(service, '_pipeline', _FailingPipeline(exc))
     return TestClient(app, raise_server_exceptions=False)
 
 
