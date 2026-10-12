@@ -6,7 +6,7 @@ Update this file at the end of each working session. Last updated: 2026-10-12.
 
 Phase 2 — Query router + live web search (built 2026-10-01). Phase 1 (static RAG) is done.
 
-## Hosting — prepared 2026-10-12
+## Hosting — live 2026-10-12: https://caddieai.streamlit.app
 
 - Target: Streamlit Community Cloud, public link, open to anyone, capped at 100 questions
   per UTC day across all visitors (chosen with Joseph on 2026-10-12)
@@ -21,8 +21,13 @@ Phase 2 — Query router + live web search (built 2026-10-01). Phase 1 (static R
   secrets file, limit 3): knowledge-base, off-topic and live answers worked, the counter
   went 3 → 0, and the 4th question was refused
 - CI now also runs on Python 3.12 (the hosted demo's version). Tests: 63
-- Still to do (Joseph): create the app on share.streamlit.io and paste the secrets;
-  ask Nanonino for a budget alert on the Gemini key's Google Cloud project
+- Deployed by Joseph on share.streamlit.io (repo master, `frontend/streamlit_app.py`,
+  Python 3.12, keys in the app's secrets). First boot showed "API offline": the secrets
+  weren't read, so the app looked for a local API. Fixed by re-saving the secrets in
+  TOML form (values in double quotes) and rebooting; the offline box now names that fix
+- Verified on the live site: a knowledge-base answer with 3 sources (6.0 s) and a live
+  web answer with Google's suggestions and 2 web sources (4.3 s); the counter went 100 → 98
+- Still to do: ask Nanonino for a budget alert on the Gemini key's Google Cloud project
 
 ## Phase 2 — done 2026-10-01
 

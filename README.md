@@ -2,6 +2,9 @@
 
 [![tests](https://github.com/josephamal10/CaddieAI/actions/workflows/tests.yml/badge.svg)](https://github.com/josephamal10/CaddieAI/actions/workflows/tests.yml)
 
+**Live demo: https://caddieai.streamlit.app** (capped at 100 questions a day across all
+visitors; it may take a minute to wake up if nobody has used it for a while)
+
 **CaddieAI** is a golf question-answering assistant built during an internship at
 Nanonino to learn LLMs and retrieval-augmented generation (RAG). Every answer cites
 its sources. Every question is first routed:

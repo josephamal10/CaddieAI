@@ -289,6 +289,8 @@ with st.sidebar:
         st.error('API offline')
         st.caption(f'Nothing answering at {API_URL}. Start it with:')
         st.code('uvicorn app.main:app --port 8001', language='bash')
+        # Seen on the first deploy: secrets not read, so the hosted app looked for a local API.
+        st.caption('Hosted, e.g. on Streamlit Cloud? Add `GOLF_BACKEND = "inprocess"` to the app\'s secrets and reboot it.')
         if st.button('Retry connection', use_container_width=True):
             fetch_health.clear()
             st.rerun()
